@@ -44,6 +44,28 @@ mvn test -DsuiteXmlFile=src/test/resources/cucumber-testng.xml
 
 ### Configuration
 - Edit `src/test/resources/config.properties` to change `browser` (chrome|firefox) and `baseUrl`.
+
+## Jenkins Integration
+
+This project includes complete Jenkins CI/CD integration with pipeline and freestyle job configurations.
+
+### Quick Setup
+1. Install required Jenkins plugins (Git, Maven, HTML Publisher, JUnit, Pipeline)
+2. Configure tools (JDK-11, Maven-3.9.0) in Global Tool Configuration
+3. Create pipeline job using the provided `Jenkinsfile`
+4. Set up GitHub webhook for automatic builds
+
+### Available Jenkins Profiles
+- `jenkins` - Headless mode optimized for CI/CD
+- Combined with test profiles: `-Pjenkins,cucumber-smoke`
+
+### Jenkins Files
+- `Jenkinsfile` - Pipeline as Code configuration
+- `jenkins/README.md` - Detailed setup instructions
+- `jenkins/job-config.xml` - Freestyle job configuration
+- `jenkins/Dockerfile` - Docker agent setup
+
+For detailed Jenkins setup instructions, see [jenkins/README.md](jenkins/README.md).
 - You can also override via system properties, e.g. `-Dbrowser=chrome`.
 - Headless mode: set `-DHEADLESS=true`.
 

@@ -217,6 +217,70 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- Cucumber Regression Profile -->
+        <profile>
+            <id>cucumber-regression</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${surefire.version}</version>
+                        <configuration>
+                            <includes>
+                                <include>**/runners/RegressionTestRunner.java</include>
+                            </includes>
+                            <testFailureIgnore>false</testFailureIgnore>
+                            <forkCount>1</forkCount>
+                            <reuseForks>false</reuseForks>
+                            <systemPropertyVariables>
+                                <cucumber.execution.parallel.enabled>false</cucumber.execution.parallel.enabled>
+                            </systemPropertyVariables>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.maven.surefire</groupId>
+                                <artifactId>surefire-testng</artifactId>
+                                <version>${surefire.version}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Jenkins Profile - Headless mode with enhanced reporting -->
+        <profile>
+            <id>jenkins</id>
+            <properties>
+                <headless>true</headless>
+                <browser>chrome</browser>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${surefire.version}</version>
+                        <configuration>
+                            <testFailureIgnore>true</testFailureIgnore>
+                            <forkCount>1</forkCount>
+                            <reuseForks>false</reuseForks>
+                            <systemPropertyVariables>
+                                <headless>${headless}</headless>
+                                <browser>${browser}</browser>
+                            </systemPropertyVariables>
+                            <argLine>
+                                -Xmx1024m
+                                -Djava.awt.headless=true
+                                -Dwebdriver.chrome.args="--headless,--no-sandbox,--disable-dev-shm-usage,--disable-gpu"
+                            </argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>
