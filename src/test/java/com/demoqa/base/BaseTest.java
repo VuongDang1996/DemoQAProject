@@ -56,10 +56,24 @@ public class BaseTest {
                 co.addArguments("--disable-dev-shm-usage");
                 co.addArguments("--disable-gpu");
                 co.addArguments("--remote-allow-origins=*");
-                // Block ads and pop-ups
+                // Enhanced ad blocking
                 co.addArguments("--disable-popup-blocking");
                 co.addArguments("--disable-default-apps");
                 co.addArguments("--disable-background-networking");
+                co.addArguments("--block-new-web-contents");
+                co.addArguments("--disable-plugins");
+                co.addArguments("--disable-plugins-discovery");
+                co.addArguments("--disable-preconnect");
+                co.addArguments("--disable-sync");
+                co.addArguments("--aggressive-cache-discard");
+                co.addArguments("--disable-background-timer-throttling");
+                co.addArguments("--disable-renderer-backgrounding");
+                co.addArguments("--disable-backgrounding-occluded-windows");
+                co.addArguments("--disable-ipc-flooding-protection");
+                // Block ads by host rules
+                co.addArguments("--host-rules=MAP *.googlesyndication.com 127.0.0.1");
+                co.addArguments("--host-rules=MAP *.googleadservices.com 127.0.0.1");
+                co.addArguments("--host-rules=MAP *.doubleclick.net 127.0.0.1");
                 if (headless) co.addArguments("--headless=new");
                 localDriver = new ChromeDriver(co);
                 break;

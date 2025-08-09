@@ -1,5 +1,6 @@
 package com.demoqa.pages;
 
+import com.demoqa.utils.ElementUtils;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -17,10 +18,10 @@ public class LinksPage {
     }
 
     public void clickHomeLink() {
-        homeLink.click();
+        ElementUtils.safeClick(driver, homeLink);
     }
 
     public void clickDynamicLink() {
-        dynamicLink.click();
+        ElementUtils.safeClick(driver, dynamicLink);
     }
 }

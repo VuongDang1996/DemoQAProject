@@ -1,10 +1,14 @@
 package com.demoqa.pages;
 
+import com.demoqa.utils.ElementUtils;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+
+import java.time.Duration;
 
 public class ToolTipsPage {
     private final WebDriver driver;
@@ -18,15 +22,29 @@ public class ToolTipsPage {
     }
 
     public void hoverOverButton() {
-        new Actions(driver).moveToElement(hoverButton).perform();
+        ElementUtils.moveToElement(driver, hoverButton);
+        // Wait a bit for tooltip to appear
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public String getTooltipText() {
-        return tooltip.getText();
+        try {
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(3));
+            wait.until(ExpectedConditions.visibilityOf(tooltip));
+            return tooltip.getText();
+        } catch (Exception e) {
+            return "Tooltip not found";
+        }
     }
 
     public boolean isTooltipDisplayed() {
         try {
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(3));
+            wait.until(ExpectedConditions.visibilityOf(tooltip));
             return tooltip.isDisplayed();
         } catch (Exception e) {
             return false;
