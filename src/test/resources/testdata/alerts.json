@@ -1,0 +1,21 @@
+[
+  {
+    "alertType": "simple",
+    "expectedText": "You clicked a button"
+  },
+  {
+    "alertType": "confirm",
+    "action": "accept",
+    "expectedResult": "You selected Ok"
+  },
+  {
+    "alertType": "confirm",
+    "action": "dismiss",
+    "expectedResult": "You selected Cancel"
+  },
+  {
+    "alertType": "prompt",
+    "inputText": "Test User",
+    "expectedResult": "You entered Test User"
+  }
+]

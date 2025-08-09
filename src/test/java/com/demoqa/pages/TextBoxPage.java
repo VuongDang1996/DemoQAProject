@@ -11,6 +11,8 @@ public class TextBoxPage {
 
     @FindBy(id = "userName") private WebElement fullNameInput;
     @FindBy(id = "userEmail") private WebElement emailInput;
+    @FindBy(id = "currentAddress") private WebElement currentAddressInput;
+    @FindBy(id = "permanentAddress") private WebElement permanentAddressInput;
     @FindBy(id = "submit") private WebElement submitButton;
     @FindBy(id = "output") private WebElement outputArea;
 
@@ -25,6 +27,14 @@ public class TextBoxPage {
     
     public void enterEmail(String email) { 
         ElementUtils.sendKeys(driver, emailInput, email);
+    }
+    
+    public void enterCurrentAddress(String currentAddress) { 
+        ElementUtils.sendKeys(driver, currentAddressInput, currentAddress);
+    }
+    
+    public void enterPermanentAddress(String permanentAddress) { 
+        ElementUtils.sendKeys(driver, permanentAddressInput, permanentAddress);
     }
     
     public void clickSubmit() { 
