@@ -1,0 +1,29 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd" >
+<suite name="DemoQAFullSuite" verbose="1" parallel="tests" thread-count="3">
+
+    <listeners>
+        <listener class-name="com.demoqa.listeners.TestListener"/>
+    </listeners>
+
+    <test name="AllComponentTests">
+        <classes>
+            <class name="com.demoqa.tests.TextBoxTests"/>
+            <class name="com.demoqa.tests.PracticeFormTests"/>
+            <class name="com.demoqa.tests.AlertsTests"/>
+            <class name="com.demoqa.tests.DatePickerTests"/>
+            <class name="com.demoqa.tests.DroppableTests"/>
+            <class name="com.demoqa.tests.WebTablesTests"/>
+            <class name="com.demoqa.tests.ButtonsTests"/>
+            <class name="com.demoqa.tests.LinksTests"/>
+            <class name="com.demoqa.tests.BrokenLinksTests"/>
+            <class name="com.demoqa.tests.DynamicPropertiesTests"/>
+            <class name="com.demoqa.tests.BrowserWindowsTests"/>
+            <class name="com.demoqa.tests.FramesTests"/>
+            <class name="com.demoqa.tests.SliderTests"/>
+            <class name="com.demoqa.tests.ProgressBarTests"/>
+            <class name="com.demoqa.tests.ToolTipsTests"/>
+            <class name="com.demoqa.tests.SortableTests"/>
+            <class name="com.demoqa.tests.ResizableTests"/>
+        </classes>
+    </test>
+</suite>
