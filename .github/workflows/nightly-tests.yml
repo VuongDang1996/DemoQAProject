@@ -1,0 +1,245 @@
+name: Nightly Test Suite
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC (adjust for your timezone)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      full_regression:
+        description: 'Run full regression suite'
+        required: false
+        default: true
+        type: boolean
+      send_notifications:
+        description: 'Send notifications on completion'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  MAVEN_OPTS: -Xmx2048m
+  JAVA_VERSION: '17'
+
+jobs:
+  nightly-full-suite:
+    name: Nightly Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2 hours timeout
+    
+    strategy:
+      matrix:
+        browser: [chrome, firefox]
+        test_type: [testng, cucumber]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Set up Chrome Browser
+      if: matrix.browser == 'chrome'
+      uses: browser-actions/setup-chrome@latest
+      with:
+        chrome-version: stable
+    
+    - name: Set up Firefox Browser
+      if: matrix.browser == 'firefox'
+      uses: browser-actions/setup-firefox@latest
+      with:
+        firefox-version: latest
+    
+    - name: Install Xvfb and Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libgconf-2-4 libxss1 libglib2.0-0 \
+          libnss3 libgconf-2-4 libxrandr2 libasound2 libpangocairo-1.0-0 \
+          libatk1.0-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0
+    
+    - name: Run TestNG Full Suite
+      if: matrix.test_type == 'testng'
+      run: |
+        xvfb-run -a mvn test \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true \
+          -DforkCount=4 \
+          -DreuseForks=true \
+          -DskipTests=false \
+          -Dmaven.test.failure.ignore=true
+    
+    - name: Run Cucumber Full Suite
+      if: matrix.test_type == 'cucumber'
+      run: |
+        xvfb-run -a mvn test -Pcucumber \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true \
+          -Dmaven.test.failure.ignore=true
+    
+    - name: Generate Allure Report (if configured)
+      if: always()
+      run: |
+        if [ -d "target/allure-results" ]; then
+          echo "Generating Allure report..."
+          # Add Allure report generation here
+        fi
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nightly-results-${{ matrix.browser }}-${{ matrix.test_type }}
+        path: |
+          target/surefire-reports/
+          target/cucumber-reports/
+          target/reports/
+          target/screenshots/
+        retention-days: 7
+    
+    - name: Archive Failure Screenshots
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: failure-screenshots-${{ matrix.browser }}-${{ matrix.test_type }}
+        path: target/screenshots/
+        retention-days: 30
+
+  generate-test-report:
+    name: Generate Consolidated Report
+    runs-on: ubuntu-latest
+    needs: nightly-full-suite
+    if: always()
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Download All Test Results
+      uses: actions/download-artifact@v3
+      with:
+        path: ./nightly-results
+    
+    - name: Set up Node.js for Report Processing
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Process Test Results
+      run: |
+        echo "Processing nightly test results..."
+        mkdir -p consolidated-report
+        
+        # Count total tests, passed, failed
+        total_tests=0
+        passed_tests=0
+        failed_tests=0
+        
+        for xml_file in $(find ./nightly-results -name "TEST-*.xml"); do
+          if [ -f "$xml_file" ]; then
+            tests=$(grep -o 'tests="[0-9]*"' "$xml_file" | grep -o '[0-9]*' || echo "0")
+            failures=$(grep -o 'failures="[0-9]*"' "$xml_file" | grep -o '[0-9]*' || echo "0")
+            errors=$(grep -o 'errors="[0-9]*"' "$xml_file" | grep -o '[0-9]*' || echo "0")
+            
+            total_tests=$((total_tests + tests))
+            failed_tests=$((failed_tests + failures + errors))
+          fi
+        done
+        
+        passed_tests=$((total_tests - failed_tests))
+        
+        echo "TOTAL_TESTS=$total_tests" >> $GITHUB_ENV
+        echo "PASSED_TESTS=$passed_tests" >> $GITHUB_ENV
+        echo "FAILED_TESTS=$failed_tests" >> $GITHUB_ENV
+        
+        # Create summary report
+        cat > consolidated-report/summary.md << EOF
+        # 🌙 Nightly Test Report
+        
+        **Date:** $(date)
+        **Build:** ${{ github.run_number }}
+        **Commit:** ${{ github.sha }}
+        
+        ## 📊 Test Summary
+        - **Total Tests:** $total_tests
+        - **Passed:** $passed_tests ✅
+        - **Failed:** $failed_tests ❌
+        - **Success Rate:** $((passed_tests * 100 / total_tests))%
+        
+        ## 🔗 Links
+        - [Full Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        - [Failed Tests Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        EOF
+    
+    - name: Create GitHub Issue on Failure
+      if: needs.nightly-full-suite.result == 'failure'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = `🚨 Nightly Tests Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `
+          ## Nightly Test Failure Report
+          
+          **Date:** ${new Date().toISOString()}
+          **Run:** [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          **Failed Tests:** ${{ env.FAILED_TESTS }}
+          **Total Tests:** ${{ env.TOTAL_TESTS }}
+          
+          ### Action Required
+          - [ ] Investigate failed tests
+          - [ ] Fix issues found
+          - [ ] Re-run tests to verify fixes
+          
+          ### Links
+          - [View Full Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - [Download Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'automated-test-failure', 'nightly-tests']
+          });
+    
+    - name: Upload Consolidated Report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nightly-consolidated-report
+        path: consolidated-report/
+        retention-days: 30
+
+  notify-results:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [nightly-full-suite, generate-test-report]
+    if: always() && (github.event.inputs.send_notifications == true || github.event_name == 'schedule')
+    
+    steps:
+    - name: Send Success Notification
+      if: needs.nightly-full-suite.result == 'success'
+      run: |
+        echo "✅ Nightly tests completed successfully!"
+        echo "Consider integrating with Slack/Teams/Email for actual notifications"
+        echo "Success notification would be sent here"
+    
+    - name: Send Failure Notification
+      if: needs.nightly-full-suite.result == 'failure'
+      run: |
+        echo "❌ Nightly tests failed!"
+        echo "Consider integrating with Slack/Teams/Email for actual notifications"
+        echo "Failure notification would be sent here"

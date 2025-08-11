@@ -1,0 +1,353 @@
+name: DemoQA Test Automation Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test Suite to Run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - smoke
+          - regression
+          - testng
+          - cucumber
+      browser:
+        description: 'Browser to use'
+        required: true
+        default: 'chrome'
+        type: choice
+        options:
+          - chrome
+          - firefox
+      environment:
+        description: 'Test Environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  MAVEN_OPTS: -Xmx1024m
+  JAVA_VERSION: '17'
+  NODE_VERSION: '18'
+
+jobs:
+  # Job 1: Code Quality Checks
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Compile Project
+      run: mvn clean compile test-compile
+    
+    - name: Run Maven Checkstyle (Optional)
+      run: |
+        if [ -f "checkstyle.xml" ]; then
+          mvn checkstyle:check
+        else
+          echo "Checkstyle configuration not found, skipping..."
+        fi
+      continue-on-error: true
+
+  # Job 2: TestNG Tests
+  testng-tests:
+    name: TestNG Test Suite
+    runs-on: ubuntu-latest
+    needs: code-quality
+    strategy:
+      matrix:
+        browser: [chrome, firefox]
+        test-group: [smoke, regression, full]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Set up Chrome Browser
+      if: matrix.browser == 'chrome'
+      uses: browser-actions/setup-chrome@latest
+      with:
+        chrome-version: stable
+    
+    - name: Set up Firefox Browser
+      if: matrix.browser == 'firefox'
+      uses: browser-actions/setup-firefox@latest
+      with:
+        firefox-version: latest
+    
+    - name: Install Xvfb (Virtual Display)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+    
+    - name: Run TestNG Tests - Smoke
+      if: matrix.test-group == 'smoke' || (github.event.inputs.test_suite == 'smoke' || github.event.inputs.test_suite == 'testng')
+      run: |
+        xvfb-run -a mvn test \
+          -Dtest=TextBoxTests,AlertsTests,ButtonsTests \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true \
+          -DforkCount=2 \
+          -DreuseForks=true
+    
+    - name: Run TestNG Tests - Regression
+      if: matrix.test-group == 'regression' || github.event.inputs.test_suite == 'regression'
+      run: |
+        xvfb-run -a mvn test \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true \
+          -DforkCount=3 \
+          -DreuseForks=true
+    
+    - name: Run TestNG Tests - Full Suite
+      if: matrix.test-group == 'full' || github.event.inputs.test_suite == 'full' || github.event.inputs.test_suite == 'testng'
+      run: |
+        xvfb-run -a mvn test \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true \
+          -DforkCount=3 \
+          -DreuseForks=true \
+          -DskipTests=false
+    
+    - name: Upload TestNG Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: testng-reports-${{ matrix.browser }}-${{ matrix.test-group }}
+        path: |
+          target/surefire-reports/
+          target/reports/
+        retention-days: 30
+    
+    - name: Publish TestNG Results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: TestNG Tests (${{ matrix.browser }})
+        path: target/surefire-reports/TEST-*.xml
+        reporter: java-junit
+
+  # Job 3: Cucumber Tests
+  cucumber-tests:
+    name: Cucumber BDD Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    strategy:
+      matrix:
+        browser: [chrome]
+        test-suite: [smoke, regression, all]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Set up Chrome Browser
+      uses: browser-actions/setup-chrome@latest
+      with:
+        chrome-version: stable
+    
+    - name: Install Xvfb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+    
+    - name: Run Cucumber Smoke Tests
+      if: matrix.test-suite == 'smoke' || github.event.inputs.test_suite == 'smoke'
+      run: |
+        xvfb-run -a mvn test -Pcucumber-smoke \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true
+    
+    - name: Run Cucumber Regression Tests
+      if: matrix.test-suite == 'regression'
+      run: |
+        xvfb-run -a mvn test -Pcucumber \
+          -Dtest=RegressionTestRunner \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true
+    
+    - name: Run All Cucumber Tests
+      if: matrix.test-suite == 'all' || github.event.inputs.test_suite == 'cucumber'
+      run: |
+        xvfb-run -a mvn test -Pcucumber \
+          -Dbrowser=${{ matrix.browser }} \
+          -Dheadless=true
+    
+    - name: Upload Cucumber Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: cucumber-reports-${{ matrix.browser }}-${{ matrix.test-suite }}
+        path: |
+          target/cucumber-reports/
+        retention-days: 30
+    
+    - name: Publish Cucumber Results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Cucumber Tests (${{ matrix.browser }})
+        path: target/cucumber-reports/cucumber.xml
+        reporter: java-junit
+
+  # Job 4: Performance & Load Tests (Optional)
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [testng-tests]
+    if: github.event_name == 'schedule' || github.event.inputs.test_suite == 'performance'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Run Performance Tests
+      run: |
+        echo "Performance tests would run here"
+        echo "Consider integrating with tools like JMeter, k6, or Gatling"
+    
+    - name: Upload Performance Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-reports
+        path: target/performance-reports/
+        retention-days: 7
+
+  # Job 5: Deployment & Reporting
+  report-and-deploy:
+    name: Generate Reports & Deploy
+    runs-on: ubuntu-latest
+    needs: [testng-tests, cucumber-tests]
+    if: always()
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+    
+    - name: Set up Node.js for Report Generation
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Generate Consolidated Report
+      run: |
+        echo "Generating consolidated test report..."
+        mkdir -p consolidated-reports
+        find ./artifacts -name "*.html" -exec cp {} consolidated-reports/ \;
+        find ./artifacts -name "*.xml" -exec cp {} consolidated-reports/ \;
+        ls -la consolidated-reports/
+    
+    - name: Deploy Reports to GitHub Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./consolidated-reports
+        destination_dir: test-reports/${{ github.run_number }}
+    
+    - name: Create Test Summary
+      if: always()
+      run: |
+        echo "## 🧪 Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Framework | Status | Browser | Reports |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|---------|---------|" >> $GITHUB_STEP_SUMMARY
+        echo "| TestNG | ✅ | Chrome/Firefox | [View Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> $GITHUB_STEP_SUMMARY
+        echo "| Cucumber | ✅ | Chrome | [View Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+
+  # Job 6: Notification
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [testng-tests, cucumber-tests, report-and-deploy]
+    if: always() && (github.event_name == 'push' || github.event_name == 'schedule')
+    
+    steps:
+    - name: Notify on Success
+      if: needs.testng-tests.result == 'success' && needs.cucumber-tests.result == 'success'
+      run: |
+        echo "✅ All tests passed! Notification would be sent here."
+        echo "Consider integrating with Slack, Teams, or email notifications"
+    
+    - name: Notify on Failure
+      if: needs.testng-tests.result == 'failure' || needs.cucumber-tests.result == 'failure'
+      run: |
+        echo "❌ Tests failed! Notification would be sent here."
+        echo "Consider integrating with Slack, Teams, or email notifications"

@@ -1,0 +1,138 @@
+# Security Configuration for GitHub Actions
+name: "Security & Dependency Scan"
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security scan weekly on Sundays at midnight
+    - cron: '0 0 * * 0'
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  dependency-check:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Run OWASP Dependency Check
+      run: |
+        mvn org.owasp:dependency-check-maven:check \
+          -DskipTests=true \
+          -DfailBuildOnCVSS=7 \
+          -DsuppressionsLocation=.github/dependency-suppressions.xml
+      continue-on-error: true
+    
+    - name: Upload Dependency Check Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: dependency-check-report
+        path: target/dependency-check-report.html
+        retention-days: 30
+
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Run SpotBugs Analysis
+      run: |
+        mvn clean compile spotbugs:check \
+          -DskipTests=true
+      continue-on-error: true
+    
+    - name: Upload SpotBugs Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: spotbugs-report
+        path: target/spotbugsXml.xml
+        retention-days: 30
+
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: License Compliance Scan
+      run: |
+        echo "License compliance check would run here"
+        echo "Consider integrating tools like FOSSA, WhiteSource, or License Finder"
+        
+        # Example: Check for problematic licenses
+        if grep -r "GPL" pom.xml; then
+          echo "⚠️ GPL license detected - review required"
+        fi
+        
+        if grep -r "AGPL" pom.xml; then
+          echo "⚠️ AGPL license detected - review required"
+        fi
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-check, code-quality, license-check]
+    if: always()
+    
+    steps:
+    - name: Create Security Summary
+      run: |
+        echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Check Type | Status | Action Required |" >> $GITHUB_STEP_SUMMARY
+        echo "|------------|--------|------------------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Dependency Scan | ${{ needs.dependency-check.result == 'success' && '✅ Passed' || '⚠️ Review Required' }} | ${{ needs.dependency-check.result == 'success' && 'None' || 'Check vulnerability report' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Code Quality | ${{ needs.code-quality.result == 'success' && '✅ Passed' || '⚠️ Review Required' }} | ${{ needs.code-quality.result == 'success' && 'None' || 'Review code quality issues' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| License Check | ${{ needs.license-check.result == 'success' && '✅ Passed' || '⚠️ Review Required' }} | ${{ needs.license-check.result == 'success' && 'None' || 'Review license compliance' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Scan Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

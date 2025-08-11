@@ -1,0 +1,122 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened]
+
+env:
+  MAVEN_OPTS: -Xmx1024m
+  JAVA_VERSION: '17'
+
+jobs:
+  pr-validation:
+    name: PR Smoke Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout PR Code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Compile and Validate
+      run: |
+        mvn clean compile test-compile
+        echo "✅ Code compilation successful"
+    
+    - name: Set up Chrome Browser
+      uses: browser-actions/setup-chrome@latest
+      with:
+        chrome-version: stable
+    
+    - name: Install Xvfb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+    
+    - name: Run Smoke Tests
+      run: |
+        xvfb-run -a mvn test \
+          -Dtest=TextBoxTests,AlertsTests \
+          -Dbrowser=chrome \
+          -Dheadless=true \
+          -DforkCount=1
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: pr-smoke-test-results
+        path: |
+          target/surefire-reports/
+          target/reports/
+        retention-days: 7
+    
+    - name: Comment PR with Results
+      uses: actions/github-script@v6
+      if: always()
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          let comment = `## 🧪 PR Smoke Test Results\n\n`;
+          comment += `**Status:** ${{ job.status == 'success' ? '✅ PASSED' : '❌ FAILED' }}\n`;
+          comment += `**Commit:** ${{ github.event.pull_request.head.sha }}\n`;
+          comment += `**Run:** [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n`;
+          
+          if ('${{ job.status }}' === 'success') {
+            comment += `All smoke tests passed! ✨ Ready for review.`;
+          } else {
+            comment += `Some tests failed. Please check the logs and fix issues before merging.`;
+          }
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  # Additional job for code quality checks
+  code-analysis:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Analyze Code Quality
+      run: |
+        echo "Code quality analysis would run here"
+        echo "Consider integrating with SonarQube, CodeClimate, or similar tools"
+        mvn clean compile
+    
+    - name: Check Test Coverage
+      run: |
+        echo "Test coverage analysis would run here"
+        echo "Consider adding JaCoCo for coverage reports"

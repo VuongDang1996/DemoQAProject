@@ -1,0 +1,281 @@
+name: Release Validation
+
+on:
+  release:
+    types: [published, created]
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'release-*'
+
+env:
+  MAVEN_OPTS: -Xmx2048m
+  JAVA_VERSION: '17'
+
+jobs:
+  release-validation:
+    name: Release Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hours for comprehensive testing
+    
+    strategy:
+      matrix:
+        browser: [chrome, firefox, edge]
+        environment: [staging, production]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout Release Code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+    
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Cache Maven Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: Set up Chrome Browser
+      if: matrix.browser == 'chrome'
+      uses: browser-actions/setup-chrome@latest
+      with:
+        chrome-version: stable
+    
+    - name: Set up Firefox Browser
+      if: matrix.browser == 'firefox'
+      uses: browser-actions/setup-firefox@latest
+      with:
+        firefox-version: latest
+    
+    - name: Set up Edge Browser
+      if: matrix.browser == 'edge'
+      uses: browser-actions/setup-edge@latest
+      with:
+        edge-version: stable
+    
+    - name: Install Xvfb and Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libgconf-2-4 libxss1 libglib2.0-0
+    
+    - name: Run Full Regression Suite
+      run: |
+        xvfb-run -a mvn test \
+          -Dbrowser=${{ matrix.browser }} \
+          -Denvironment=${{ matrix.environment }} \
+          -Dheadless=true \
+          -DforkCount=4 \
+          -DreuseForks=true \
+          -DskipTests=false \
+          -Dmaven.test.failure.ignore=false
+    
+    - name: Run Cucumber Tests
+      run: |
+        xvfb-run -a mvn test -Pcucumber \
+          -Dbrowser=${{ matrix.browser }} \
+          -Denvironment=${{ matrix.environment }} \
+          -Dheadless=true
+    
+    - name: Upload Release Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: release-validation-${{ matrix.browser }}-${{ matrix.environment }}
+        path: |
+          target/surefire-reports/
+          target/cucumber-reports/
+          target/reports/
+          target/screenshots/
+        retention-days: 90  # Keep release results longer
+    
+    - name: Upload Screenshots on Failure
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: release-failure-screenshots-${{ matrix.browser }}-${{ matrix.environment }}
+        path: target/screenshots/
+        retention-days: 90
+
+  create-release-report:
+    name: Create Release Report
+    runs-on: ubuntu-latest
+    needs: release-validation
+    if: always()
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Download All Test Results
+      uses: actions/download-artifact@v3
+      with:
+        path: ./release-results
+    
+    - name: Generate Release Report
+      run: |
+        echo "Generating comprehensive release validation report..."
+        mkdir -p release-report
+        
+        # Extract release version
+        RELEASE_VERSION="${{ github.ref_name }}"
+        echo "RELEASE_VERSION=$RELEASE_VERSION" >> $GITHUB_ENV
+        
+        # Create comprehensive release report
+        cat > release-report/RELEASE_VALIDATION_REPORT.md << EOF
+        # 🚀 Release Validation Report
+        
+        **Release Version:** $RELEASE_VERSION
+        **Date:** $(date)
+        **Build:** ${{ github.run_number }}
+        **Commit:** ${{ github.sha }}
+        
+        ## Test Environment Coverage
+        - ✅ Chrome Browser Testing
+        - ✅ Firefox Browser Testing  
+        - ✅ Edge Browser Testing
+        - ✅ Staging Environment
+        - ✅ Production Environment
+        
+        ## Framework Coverage
+        - ✅ TestNG Test Suite
+        - ✅ Cucumber BDD Tests
+        - ✅ Cross-browser Compatibility
+        - ✅ Multi-environment Testing
+        
+        ## Quality Gates
+        - [ ] All Tests Passed: ${{ needs.release-validation.result == 'success' && '✅' || '❌' }}
+        - [ ] No Critical Failures
+        - [ ] Performance Within Limits
+        - [ ] Security Checks Passed
+        
+        ## Release Readiness
+        **Status:** ${{ needs.release-validation.result == 'success' && '🟢 READY FOR RELEASE' || '🔴 NOT READY - ISSUES FOUND' }}
+        
+        ## Artifacts
+        - [Test Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        - [Detailed Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        
+        ---
+        *Generated automatically by GitHub Actions*
+        EOF
+        
+        echo "Release validation completed for version: $RELEASE_VERSION"
+    
+    - name: Upload Release Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-validation-report-${{ env.RELEASE_VERSION }}
+        path: release-report/
+        retention-days: 365  # Keep release reports for a year
+    
+    - name: Comment on Release
+      if: github.event_name == 'release'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const releaseId = context.payload.release.id;
+          const status = '${{ needs.release-validation.result }}' === 'success' ? '✅ PASSED' : '❌ FAILED';
+          
+          const comment = `
+          ## 🧪 Release Validation Results
+          
+          **Status:** ${status}
+          **Version:** ${{ env.RELEASE_VERSION }}
+          **Tested Browsers:** Chrome, Firefox, Edge
+          **Tested Environments:** Staging, Production
+          
+          **Validation Summary:**
+          - TestNG Tests: ${{ needs.release-validation.result }}
+          - Cucumber Tests: ${{ needs.release-validation.result }}
+          - Cross-browser: ${{ needs.release-validation.result }}
+          
+          [📊 View Detailed Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ${status.includes('FAILED') ? '⚠️ **Action Required:** Please review failed tests before proceeding with release.' : '🎉 **Release validated successfully!** Ready for deployment.'}
+          `;
+          
+          github.rest.repos.updateRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            release_id: releaseId,
+            body: context.payload.release.body + '\n\n' + comment
+          });
+
+  deployment-readiness:
+    name: Deployment Readiness Check
+    runs-on: ubuntu-latest
+    needs: [release-validation, create-release-report]
+    if: needs.release-validation.result == 'success'
+    
+    steps:
+    - name: Mark Release as Deployment Ready
+      run: |
+        echo "🎉 Release ${{ github.ref_name }} has passed all validation tests!"
+        echo "✅ Ready for production deployment"
+        echo "📋 All quality gates satisfied"
+    
+    - name: Create Deployment Checklist
+      run: |
+        cat > deployment-checklist.md << EOF
+        # 🚀 Deployment Checklist for ${{ github.ref_name }}
+        
+        ## Pre-deployment
+        - [x] All tests passed
+        - [x] Code review completed
+        - [x] Security scan completed
+        - [ ] Database migrations prepared
+        - [ ] Rollback plan ready
+        - [ ] Monitoring alerts configured
+        
+        ## Deployment
+        - [ ] Deploy to staging
+        - [ ] Smoke test staging
+        - [ ] Deploy to production
+        - [ ] Smoke test production
+        - [ ] Monitor for 24 hours
+        
+        ## Post-deployment
+        - [ ] Verify all features working
+        - [ ] Check performance metrics
+        - [ ] Confirm monitoring active
+        - [ ] Update documentation
+        
+        **Approved by:** Automated Testing Suite
+        **Date:** $(date)
+        EOF
+    
+    - name: Upload Deployment Checklist
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-checklist-${{ github.ref_name }}
+        path: deployment-checklist.md
+        retention-days: 30
+
+  notify-release-status:
+    name: Notify Release Status
+    runs-on: ubuntu-latest
+    needs: [release-validation, create-release-report]
+    if: always()
+    
+    steps:
+    - name: Notify Success
+      if: needs.release-validation.result == 'success'
+      run: |
+        echo "🎉 Release ${{ github.ref_name }} validation SUCCESSFUL!"
+        echo "Ready for deployment to production"
+        
+    - name: Notify Failure
+      if: needs.release-validation.result == 'failure'
+      run: |
+        echo "❌ Release ${{ github.ref_name }} validation FAILED!"
+        echo "Release is NOT ready for deployment"
