@@ -75,12 +75,16 @@ jobs:
           const fs = require('fs');
           const path = require('path');
           
+          // Determine status based on job results
+          const jobStatus = '${{ job.status }}';
+          const statusIcon = jobStatus === 'success' ? '✅ PASSED' : '❌ FAILED';
+          
           let comment = `## 🧪 PR Smoke Test Results\n\n`;
-          comment += `**Status:** ${{ job.status == 'success' ? '✅ PASSED' : '❌ FAILED' }}\n`;
+          comment += `**Status:** ${statusIcon}\n`;
           comment += `**Commit:** ${{ github.event.pull_request.head.sha }}\n`;
           comment += `**Run:** [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n`;
           
-          if ('${{ job.status }}' === 'success') {
+          if (jobStatus === 'success') {
             comment += `All smoke tests passed! ✨ Ready for review.`;
           } else {
             comment += `Some tests failed. Please check the logs and fix issues before merging.`;
