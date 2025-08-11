@@ -22,11 +22,35 @@ public class ResizablePage {
     public void resizeBox(int xOffset, int yOffset) {
         try {
             ElementUtils.scrollToElement(driver, resizableBox);
-            // Use smaller, safer offset values
-            int safeXOffset = Math.min(Math.abs(xOffset), 20) * (xOffset < 0 ? -1 : 1);
-            int safeYOffset = Math.min(Math.abs(yOffset), 20) * (yOffset < 0 ? -1 : 1);
+            ElementUtils.waitForElement(driver, resizeHandle, 10);
             
-            new Actions(driver).dragAndDropBy(resizeHandle, safeXOffset, safeYOffset).perform();
+            // Get browser name to handle Firefox differently
+            String browserName = ((org.openqa.selenium.remote.RemoteWebDriver) driver)
+                .getCapabilities().getBrowserName().toLowerCase();
+            
+            if (browserName.contains("firefox")) {
+                // Firefox requires more explicit resize handling
+                Actions actions = new Actions(driver);
+                actions.moveToElement(resizeHandle)
+                       .clickAndHold()
+                       .moveByOffset(xOffset, yOffset)
+                       .release()
+                       .perform();
+                       
+                // Wait for Firefox to process the resize
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            } else {
+                // Chrome/other browsers
+                int safeXOffset = Math.min(Math.abs(xOffset), 20) * (xOffset < 0 ? -1 : 1);
+                int safeYOffset = Math.min(Math.abs(yOffset), 20) * (yOffset < 0 ? -1 : 1);
+                
+                new Actions(driver).dragAndDropBy(resizeHandle, safeXOffset, safeYOffset).perform();
+            }
+            
         } catch (Exception e) {
             System.out.println("Resize failed with Actions, using JavaScript: " + e.getMessage());
             // Fallback to JavaScript resize

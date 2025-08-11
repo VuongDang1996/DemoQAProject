@@ -10,10 +10,10 @@ import org.testng.annotations.DataProvider;
         tags = "@Smoke",
         plugin = {
                 "pretty",
-                "html:target/cucumber-reports/cucumber-html-report",
-                "json:target/cucumber-reports/cucumber.json",
-                "junit:target/cucumber-reports/cucumber.xml",
-                "rerun:target/cucumber-reports/rerun.txt"
+                "html:target/cucumber-reports/smoke-html-report",
+                "json:target/cucumber-reports/smoke.json",
+                "junit:target/cucumber-reports/smoke.xml",
+                "rerun:target/cucumber-reports/smoke-rerun.txt"
         },
         monochrome = true,
         publish = true

@@ -18,13 +18,23 @@ public class DroppablePage {
     }
 
     public void dragAndDrop() {
-        ElementUtils.dragAndDrop(driver, draggable, droppable);
-        // Wait for drop animation
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        ElementUtils.scrollToElement(driver, draggable);
+        ElementUtils.waitForElement(driver, draggable, 10);
+        ElementUtils.waitForElement(driver, droppable, 10);
+        
+        // Firefox-specific drag and drop handling
+        String browserName = ((org.openqa.selenium.remote.RemoteWebDriver) driver)
+            .getCapabilities().getBrowserName().toLowerCase();
+        
+        if (browserName.contains("firefox")) {
+            // Firefox requires more explicit handling
+            ElementUtils.dragAndDropWithRetry(driver, draggable, droppable);
+        } else {
+            ElementUtils.dragAndDrop(driver, draggable, droppable);
         }
+        
+        // Wait for drop animation and state change
+        ElementUtils.waitForTextChange(driver, droppable, "Drop here", 10);
     }
 
     public String getDroppableText() { 
