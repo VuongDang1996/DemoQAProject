@@ -18,8 +18,12 @@ public class ProgressBarTests extends BaseTest {
         progressBarPage.clickStartButton();
         
         WebDriverWait wait = new WebDriverWait(getDriver(), Duration.ofSeconds(15));
-        wait.until(driver -> progressBarPage.getProgressValue().equals("100"));
+        wait.until(driver -> {
+            String progressValue = progressBarPage.getProgressValue();
+            return progressValue != null && progressValue.equals("100");
+        });
         
-        Assert.assertEquals(progressBarPage.getProgressValue(), "100");
+        String finalProgress = progressBarPage.getProgressValue();
+        Assert.assertEquals(finalProgress, "100", "Progress bar should reach 100%");
     }
 }

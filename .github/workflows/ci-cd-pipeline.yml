@@ -86,6 +86,10 @@ jobs:
     name: TestNG Test Suite
     runs-on: ubuntu-latest
     needs: code-quality
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     strategy:
       matrix:
         browser: [chrome, firefox]
@@ -169,16 +173,22 @@ jobs:
     - name: Publish TestNG Results
       uses: dorny/test-reporter@v1
       if: always()
+      continue-on-error: true
       with:
         name: TestNG Tests (${{ matrix.browser }})
         path: target/surefire-reports/TEST-*.xml
         reporter: java-junit
+        token: ${{ secrets.GITHUB_TOKEN }}
 
   # Job 3: Cucumber Tests
   cucumber-tests:
     name: Cucumber BDD Tests
     runs-on: ubuntu-latest
     needs: code-quality
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     strategy:
       matrix:
         browser: [chrome]
@@ -247,10 +257,12 @@ jobs:
     - name: Publish Cucumber Results
       uses: dorny/test-reporter@v1
       if: always()
+      continue-on-error: true
       with:
         name: Cucumber Tests (${{ matrix.browser }})
         path: target/cucumber-reports/cucumber.xml
         reporter: java-junit
+        token: ${{ secrets.GITHUB_TOKEN }}
 
   # Job 4: Performance & Load Tests (Optional)
   performance-tests:
