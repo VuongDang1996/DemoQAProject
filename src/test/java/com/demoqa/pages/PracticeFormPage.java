@@ -1,11 +1,10 @@
 package com.demoqa.pages;
 
+import com.demoqa.utils.ElementUtils;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -21,8 +20,10 @@ public class PracticeFormPage {
     @FindBy(id = "lastName") private WebElement lastNameInput;
     @FindBy(id = "userEmail") private WebElement emailInput;
     @FindBy(xpath = "//label[@for='gender-radio-1']") private WebElement maleRadioLabel;
+    @FindBy(id = "gender-radio-1") private WebElement maleRadioInput;
     @FindBy(id = "userNumber") private WebElement mobileInput;
     @FindBy(xpath = "//label[@for='hobbies-checkbox-1']") private WebElement sportsCheckboxLabel;
+    @FindBy(id = "hobbies-checkbox-1") private WebElement sportsCheckboxInput;
     @FindBy(id = "submit") private WebElement submitButton;
     @FindBy(id = "example-modal-sizes-title-lg") private WebElement modalTitle;
     @FindBy(className = "modal-title") private WebElement modalTitleAlternative;
@@ -35,40 +36,51 @@ public class PracticeFormPage {
 
     public void enterFirstName(String firstName) { 
         wait.until(ExpectedConditions.elementToBeClickable(firstNameInput));
-        firstNameInput.sendKeys(firstName); 
+        ElementUtils.sendKeys(driver, firstNameInput, firstName);
     }
     
     public void enterLastName(String lastName) { 
         wait.until(ExpectedConditions.elementToBeClickable(lastNameInput));
-        lastNameInput.sendKeys(lastName); 
+        ElementUtils.sendKeys(driver, lastNameInput, lastName);
     }
     
     public void enterEmail(String email) { 
         wait.until(ExpectedConditions.elementToBeClickable(emailInput));
-        emailInput.sendKeys(email); 
+        ElementUtils.sendKeys(driver, emailInput, email);
     }
     
     public void selectMaleGender() { 
-        wait.until(ExpectedConditions.elementToBeClickable(maleRadioLabel));
-        maleRadioLabel.click(); 
+        try {
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.id("gender-radio-1")));
+            // Try clicking the input directly first
+            ElementUtils.safeClick(driver, maleRadioInput);
+        } catch (Exception e) {
+            // Fallback to label click
+            ElementUtils.safeClick(driver, maleRadioLabel);
+        }
     }
     
     public void enterMobile(String mobile) { 
         wait.until(ExpectedConditions.elementToBeClickable(mobileInput));
-        mobileInput.sendKeys(mobile); 
+        ElementUtils.sendKeys(driver, mobileInput, mobile);
     }
     
     public void selectSportsHobby() { 
-        wait.until(ExpectedConditions.elementToBeClickable(sportsCheckboxLabel));
-        sportsCheckboxLabel.click(); 
+        try {
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.id("hobbies-checkbox-1")));
+            // Try clicking the input directly using JavaScript since it's often hidden
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            js.executeScript("arguments[0].click();", sportsCheckboxInput);
+        } catch (Exception e) {
+            // Fallback to label click
+            ElementUtils.safeClick(driver, sportsCheckboxLabel);
+        }
     }
     
     public void submitForm() { 
-        // Scroll to submit button and click using JavaScript
-        JavascriptExecutor js = (JavascriptExecutor) driver;
-        js.executeScript("arguments[0].scrollIntoView(true);", submitButton);
-        wait.until(ExpectedConditions.elementToBeClickable(submitButton));
-        js.executeScript("arguments[0].click();", submitButton);
+        // Scroll to submit button and click using robust method
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.id("submit")));
+        ElementUtils.safeClick(driver, submitButton);
     }
 
     public String getModalTitle() { 
