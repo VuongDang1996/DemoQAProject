@@ -37,7 +37,7 @@ jobs:
         distribution: 'temurin'
     
     - name: Cache Maven Dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -86,7 +86,7 @@ jobs:
           -Dheadless=true
     
     - name: Upload Release Test Results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: release-validation-${{ matrix.browser }}-${{ matrix.environment }}
@@ -98,7 +98,7 @@ jobs:
         retention-days: 90  # Keep release results longer
     
     - name: Upload Screenshots on Failure
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: release-failure-screenshots-${{ matrix.browser }}-${{ matrix.environment }}
@@ -116,7 +116,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Download All Test Results
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: ./release-results
     
@@ -171,7 +171,7 @@ jobs:
         echo "Release validation completed for version: $RELEASE_VERSION"
     
     - name: Upload Release Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: release-validation-report-${{ env.RELEASE_VERSION }}
         path: release-report/
@@ -255,7 +255,7 @@ jobs:
         EOF
     
     - name: Upload Deployment Checklist
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: deployment-checklist-${{ github.ref_name }}
         path: deployment-checklist.md
